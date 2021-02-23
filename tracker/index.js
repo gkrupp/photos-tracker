@@ -125,8 +125,7 @@ async function watch (userId, root) {
     ignored: /(^|[/\\])\../,
     ignoreInitial: true,
     followSymlinks: false,
-    usePolling: true,
-    interval: 1000,
+    usePolling: false,
     depth: 64
   })
   watcher
