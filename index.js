@@ -22,6 +22,10 @@ async function init () {
     processes: config.proc.processes
   })
 
+  // Started
+  process.send = process.send || (() => {})
+  process.send('ready')
+
   // Startup and Watch
   for (const trackerConf of config.tracker.roots) {
     if (config.tracker.watch) await Tracker.watch(trackerConf.userId, trackerConf.path)
