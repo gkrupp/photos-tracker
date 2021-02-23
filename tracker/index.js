@@ -1,11 +1,11 @@
-const fs = require('fs')
+
 const pathlib = require('path')
 const config = require('../config')
 
 const chokidar = require('chokidar')
 
-const Album = require(config.common('./models/album'))
-const Photo = require(config.common('./models/photo'))
+const Album = require('../../photos-common/models/album')
+const Photo = require('../../photos-common/models/photo')
 
 let Q = null
 let HOST = '*'
@@ -32,12 +32,12 @@ async function handleCompleted (job, res) {
     const insertedIds = await albumDB.insert(insert)
     insert.forEach((el, i) => (el.id = insertedIds[i]))
     // remain
-    await albumDB._processingFlagsUser(userId, { scan: false }, remain)
+    await albumDB._processingFlags({}, { scan: false }, remain)
     // update
     for (const ud of update) {
       await albumDB.update(ud.id, ud.update)
     }
-    await albumDB._processingFlagsUser(userId, { scan: false }, update.map(ud => ud.id))
+    await albumDB._processingFlags({}, { scan: false }, update.map(ud => ud.id))
   }
 
   // merge photos
@@ -48,7 +48,7 @@ async function handleCompleted (job, res) {
     // insert
     await photoDB.insert(insert)
     // remain
-    await photoDB._processingFlagsUser(userId, { scan: false }, remain)
+    await photoDB._processingFlags({}, { scan: false }, remain)
     // update
     for (const ud of update) {
       await photoDB.update(ud.query, ud.update)
@@ -83,9 +83,10 @@ async function init ({ colls, queue, processorQueue = null, host = '*', processe
     return new Promise((resolve, reject) => {
       setTimeout(async () => {
         if (!wereQueueOperations && await Q.count() === 0) {
-          const deleted = await photoDB.find({ _processingFlags: { scan: true } }, Photo.projections.id)
-          await albumDB.deleteMany({ _processingFlags: { scan: true } })
-          await photoDB.deleteMany({ _processingFlags: { scan: true } })
+          const query = { _processingFlags: { scan: true } }
+          const deleted = await photoDB.find(query, Photo.projections.id)
+          await albumDB.deleteMany(query)
+          await photoDB.deleteMany(query)
           await Photo.removeThumbs(deleted.map(doc => doc.id), config.content.thumbDir, config.content.thumbTypes)
           console.log(`deleted ${deleted.length} image thumbnail sets`)
           console.log('marked cleared')
@@ -105,8 +106,11 @@ async function stop () {
 async function scan (userId, root) {
   if (!userId) throw new Error(`'userId' is not defined for the path '${root}'`)
   console.log(`Tracker.scan(root:'${root}', userId:'${userId}')`)
-  await albumDB._processingFlags(userId, { scan: true })
-  await photoDB._processingFlags(userId, { scan: true })
+  const pathPrefixRegEx = new RegExp('^' + root)
+  const query = { userId, path: { $regex: pathPrefixRegEx } }
+  const flags = { scan: true }
+  await albumDB._processingFlags(query, flags)
+  await photoDB._processingFlags(query, flags)
   wereQueueOperations = true
   await Q.add(HOST, {
     userId,

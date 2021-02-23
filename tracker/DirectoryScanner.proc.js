@@ -1,8 +1,7 @@
 const fs = require('fs')
 const path = require('path')
-const config = require(path.join(__dirname, '../config'))
-const Album = require(config.common('./models/album'))
-const Photo = require(config.common('./models/photo'))
+const Album = require('../../photos-common/models/album')
+const Photo = require('../../photos-common/models/photo')
 
 async function listRoot (rootPath, userId, rootName = '/') {
   const photos = []

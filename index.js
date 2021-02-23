@@ -2,8 +2,8 @@ const dotenv = require('dotenv')
 dotenv.config({ path: './config/.env' })
 const config = require('./config')
 
-const MongoDBService = require(config.common('./services/MongoDBService'))
-const QueueService = require(config.common('./services/QueueService'))
+const MongoDBService = require('../photos-common/services/MongoDBService')
+const QueueService = require('../photos-common/services/QueueService')
 const Tracker = require('./tracker')
 
 async function init () {
