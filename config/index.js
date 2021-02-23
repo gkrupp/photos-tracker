@@ -1,9 +1,6 @@
 require('dotenv')
-const path = require('path')
 
 module.exports = {
-  commonPath: process.env.COMMON_PATH,
-  common: (file) => path.resolve(process.cwd(), process.env.COMMON_PATH, file),
   tracker: {
     roots: process.env.TRACKER_ROOTS.split(',').map((root, i) => {
       return {
