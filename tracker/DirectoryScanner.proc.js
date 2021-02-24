@@ -3,9 +3,9 @@ const path = require('path')
 const Album = require('../../photos-common/models/album')
 const Photo = require('../../photos-common/models/photo')
 
-async function listRoot (rootPath, userId, rootName = '/') {
+async function listRoot (rootPath, userId, rootName = '@') {
   const photos = []
-  const albums = [await Album.newDocument({ userId, path: rootPath, name: rootName }, { getStats: true })]
+  const albums = [await Album.newDocument({ userId, path: rootPath, fileName: rootName }, { getStats: true })]
   return { albums, photos }
 }
 
@@ -17,7 +17,7 @@ async function listPath (rootPath, userId, parentId) {
     const itemPath = path.resolve(rootPath, item.name)
     if (item.isDirectory() && !item.name.startsWith('.')) {
       albums.push(
-        await Album.newDocument({ path: itemPath, userId, parentId, name: item.name }, { getStats: true })
+        await Album.newDocument({ path: itemPath, userId, parentId }, { getStats: true })
       )
     } else if (item.isFile() && Photo.allowedFileTypes.includes(path.extname(item.name).toLowerCase())) {
       photos.push(
