@@ -22,7 +22,7 @@ async function init () {
     processes: config.proc.processes
   })
 
-  // Started
+  // Process start signal
   process.send = process.send || (() => {})
   process.send('ready')
 
