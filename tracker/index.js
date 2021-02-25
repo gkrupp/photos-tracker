@@ -126,7 +126,9 @@ async function watch (userId, root) {
     ignoreInitial: true,
     followSymlinks: false,
     usePolling: false,
-    depth: 64
+    depth: 64,
+    awaitWriteFinish: true,
+    atomic: 1000
   })
   watcher
     .on('addDir', async (path) => {
