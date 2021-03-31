@@ -32,12 +32,12 @@ async function handleCompleted (job, res) {
     const insertedIds = await albumDB.insert(insert)
     insert.forEach((el, i) => (el.id = insertedIds[i]))
     // remain
-    await albumDB._processingFlags({}, { scan: false }, remain)
+    await albumDB._processingFlags(remain, { scan: false })
     // update
     for (const ud of update) {
       await albumDB.update(ud.id, ud.update)
     }
-    await albumDB._processingFlags({}, { scan: false }, update.map(ud => ud.id))
+    await albumDB._processingFlags(update.map(ud => ud.id), { scan: false })
   }
 
   // merge photos
@@ -48,7 +48,7 @@ async function handleCompleted (job, res) {
     // insert
     await photoDB.insert(insert)
     // remain
-    await photoDB._processingFlags({}, { scan: false }, remain)
+    await photoDB._processingFlags(remain, { scan: false })
     // update
     for (const ud of update) {
       await photoDB.update(ud.query, ud.update)
