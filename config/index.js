@@ -11,9 +11,11 @@ module.exports = {
     startup: Boolean(process.env.TRACKER_STARTUP) || false,
     watch: Boolean(process.env.TRACKER_WATCH) || false
   },
-  content: {
-    thumbDir: process.env.CONTENT_THUMB_DIR,
-    thumbTypes: process.env.CONTENT_THUMB_TYPES.split(',')
+  caches: {
+    thumbnails: {
+      root: process.env.CACHE_THUMBS_ROOT,
+      levels: Number(process.env.CACHE_THUMBS_LEVELS)
+    }
   },
   proc: {
     host: process.env.PROC_HOST,

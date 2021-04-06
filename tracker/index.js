@@ -7,11 +7,15 @@ const chokidar = require('chokidar')
 const Album = require('../../photos-common/models/album')
 const Photo = require('../../photos-common/models/photo')
 
+const CacheManager = require('../../photos-common/services/CacheService')
+
 let Q = null
 let HOST = '*'
 
 let albumDB = null
 let photoDB = null
+
+let thumbnailCache = null
 
 let wereQueueOperations = false
 
@@ -71,9 +75,11 @@ async function init ({ colls, queue, processorQueue = null, host = '*', processe
   Q.process(HOST, processes, pathlib.join(__dirname, './DirectoryScanner.proc.js'))
   // roots
   HOST = host
+  // caches
+  thumbnailCache = new CacheManager(config.caches.thumbnails)
   // DBs
   albumDB = new Album(colls.albums)
-  photoDB = new Photo(colls.photos, { host, processorQueue })
+  photoDB = new Photo(colls.photos, { host, processorQueue, thumbnailCache })
 
   Q.on('active', handleActive)
   Q.on('completed', handleCompleted)
@@ -84,11 +90,8 @@ async function init ({ colls, queue, processorQueue = null, host = '*', processe
       setTimeout(async () => {
         if (!wereQueueOperations && await Q.count() === 0) {
           const query = { _processingFlags: { scan: true } }
-          const deleted = await photoDB.find(query, Photo.projections.id)
           await albumDB.deleteMany(query)
-          await photoDB.deleteMany(query)
-          await Photo.removeThumbs(deleted.map(doc => doc.id), config.content.thumbDir, config.content.thumbTypes)
-          console.log(`deleted ${deleted.length} image thumbnail sets`)
+          await photoDB.fullRemove(query)
           console.log('marked cleared')
         }
         resolve()
@@ -154,12 +157,7 @@ async function watch (userId, root) {
       }
     })
     .on('unlink', async (path) => {
-      const deleted = await photoDB.findOne({ path }, Photo.projections.id)
-      await photoDB.deleteOne({ path })
-      if (deleted) {
-        await Photo.removeThumbs(deleted.id, config.content.thumbDir, config.content.thumbTypes)
-        console.log('deleted 1 image thumbnail set')
-      }
+      await photoDB.fullRemove({ path })
       console.log(path, 'unlink')
     })
 }
