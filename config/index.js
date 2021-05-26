@@ -11,12 +11,6 @@ module.exports = {
     startup: Boolean(process.env.TRACKER_STARTUP) || false,
     watch: Boolean(process.env.TRACKER_WATCH) || false
   },
-  caches: {
-    thumbnails: {
-      root: process.env.CACHE_THUMBS_ROOT,
-      levels: Number(process.env.CACHE_THUMBS_LEVELS)
-    }
-  },
   proc: {
     host: process.env.PROC_HOST,
     queuePrefix: process.env.PROC_QUEUE_PREFIX,

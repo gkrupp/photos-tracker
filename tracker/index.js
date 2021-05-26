@@ -1,21 +1,15 @@
 
 const pathlib = require('path')
-const config = require('../config')
-
 const chokidar = require('chokidar')
 
 const Album = require('../../photos-common/models/album')
 const Photo = require('../../photos-common/models/photo')
-
-const CacheManager = require('../../photos-common/services/CacheService')
 
 let Q = null
 let HOST = '*'
 
 let albumDB = null
 let photoDB = null
-
-let thumbnailCache = null
 
 let wereQueueOperations = false
 
@@ -36,12 +30,12 @@ async function handleCompleted (job, res) {
     const insertedIds = await albumDB.insert(insert)
     insert.forEach((el, i) => (el.id = insertedIds[i]))
     // remain
-    await albumDB._processingFlags(remain, { scan: false })
+    await albumDB.popProcessingFlags(remain, '@scan')
     // update
     for (const ud of update) {
       await albumDB.update(ud.id, ud.update)
     }
-    await albumDB._processingFlags(update.map(ud => ud.id), { scan: false })
+    await albumDB.popProcessingFlags(update.map(ud => ud.id), '@scan')
   }
 
   // merge photos
@@ -52,7 +46,7 @@ async function handleCompleted (job, res) {
     // insert
     await photoDB.insert(insert)
     // remain
-    await photoDB._processingFlags(remain, { scan: false })
+    await photoDB.popProcessingFlags(remain, '@scan')
     // update
     for (const ud of update) {
       await photoDB.update(ud.query, ud.update)
@@ -75,11 +69,9 @@ async function init ({ colls, queue, processorQueue = null, host = '*', processe
   Q.process(HOST, processes, pathlib.join(__dirname, './DirectoryScanner.proc.js'))
   // roots
   HOST = host
-  // caches
-  thumbnailCache = new CacheManager(config.caches.thumbnails)
   // DBs
   albumDB = new Album(colls.albums)
-  photoDB = new Photo(colls.photos, { host, processorQueue, thumbnailCache })
+  photoDB = new Photo(colls.photos, { host, processorQueue })
 
   Q.on('active', handleActive)
   Q.on('completed', handleCompleted)
@@ -89,13 +81,13 @@ async function init ({ colls, queue, processorQueue = null, host = '*', processe
     return new Promise((resolve, reject) => {
       setTimeout(async () => {
         if (!wereQueueOperations && await Q.count() === 0) {
-          const query = { _processingFlags: { scan: true } }
+          const query = { _processingFlags: '@scan' }
           await albumDB.deleteMany(query)
-          await photoDB.fullRemove(query)
+          await photoDB.deleteMany(query)
           console.log('marked cleared')
         }
         resolve()
-      }, 4000)
+      }, 8000)
     }).catch(console.error)
   })
 
@@ -111,9 +103,8 @@ async function scan (userId, root) {
   console.log(`Tracker.scan(root:'${root}', userId:'${userId}')`)
   const pathPrefixRegEx = new RegExp('^' + root)
   const query = { userId, path: { $regex: pathPrefixRegEx } }
-  const flags = { scan: true }
-  await albumDB._processingFlags(query, flags)
-  await photoDB._processingFlags(query, flags)
+  await albumDB.pushProcessingFlags(query, '@scan')
+  await photoDB.pushProcessingFlags(query, '@scan')
   wereQueueOperations = true
   await Q.add(HOST, {
     userId,
@@ -157,7 +148,7 @@ async function watch (userId, root) {
       }
     })
     .on('unlink', async (path) => {
-      await photoDB.fullRemove({ path })
+      await photoDB.deleteMany({ path })
       console.log(path, 'unlink')
     })
 }
