@@ -60,14 +60,7 @@ async function handleCompleted (job, res) {
   }
 
   // cleanup
-  {
-    // remove
-    await deleteRemainingUnprocessed({ parentId, _processingFlags: '@scan' })
-    // albumSize
-    console.error(parentId)
-    const albumSize = (await photoDB.aggregateOne({ parentId }, Photo.aggregations.albumSize()))?.size || 0
-    await albumDB.updateOne(parentId, { $set: { size: albumSize } })
-  }
+  await deleteRemainingUnprocessed({ parentId, _processingFlags: '@scan' })
 
   // recursion
   for (const a of res.albums) {
@@ -157,14 +150,11 @@ async function watch (userId, root) {
         const newPhoto = await Photo.newDocument({ userId, parentId: parent.id, path }, { getStats: true })
         if (Photo.allowedFileTypes.includes(newPhoto.extension)) {
           await photoDB.insert(newPhoto)
-          await albumDB.updateSize(parent, newPhoto.size || 0)
           console.log(path, parent.id, 'add')
         }
       }
     })
     .on('unlink', async (path) => {
-      const photo = await photoDB.findOne({ path: pathlib.dirname(path) }, Photo.projections.physical())
-      await albumDB.updateSize(parent, (-1 * photo.size) || 0)
       await photoDB.deleteMany({ path })
       console.log(path, 'unlink')
     })
