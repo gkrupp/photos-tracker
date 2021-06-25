@@ -17,14 +17,20 @@ async function handleActive () {
   wereQueueOperations = true
 }
 
+async function deleteRemainingUnprocessed (query) {
+  await albumDB.deleteMany(query)
+  await photoDB.deleteMany(query)
+}
+
 async function handleCompleted (job, res) {
   const userId = job.data.userId
+  const parentId = job.data.parentId
   console.log(res.albums.length, res.photos.length, job.data.path)
 
   // merge albums
   {
     res.albums = await Promise.all(res.albums.map(Album.newDocument))
-    const inDB = await albumDB.children(userId, job.data.parentId, Album.projections.physical)
+    const inDB = await albumDB.children(userId, parentId, Album.projections.physical)
     const { insert, remain, update } = Album.merge(inDB, res.albums)
     // insert
     const insertedIds = await albumDB.insert(insert)
@@ -41,7 +47,7 @@ async function handleCompleted (job, res) {
   // merge photos
   {
     res.photos = await Promise.all(res.photos.map(Photo.newDocument))
-    const inDB = await photoDB.children(userId, job.data.parentId, Photo.projections.physical)
+    const inDB = await photoDB.children(userId, parentId, Photo.projections.physical)
     const { insert, remain, update } = Photo.merge(inDB, res.photos)
     // insert
     await photoDB.insert(insert)
@@ -51,6 +57,15 @@ async function handleCompleted (job, res) {
     for (const ud of update) {
       await photoDB.update(ud.query, ud.update)
     }
+  }
+
+  // cleanup
+  {
+    // remove
+    await deleteRemainingUnprocessed({ parentId, _processingFlags: '@scan' })
+    // album size
+    const albumSize = await albumDB.aggregateOne({ parentId }, Album.aggregations.totalSize)
+    await albumDB.updateOne(parentId, { $set: { size: albumSize } })
   }
 
   // recursion
@@ -81,9 +96,7 @@ async function init ({ colls, queue, processorQueue = null, host = '*', processe
     return new Promise((resolve, reject) => {
       setTimeout(async () => {
         if (!wereQueueOperations && await Q.count() === 0) {
-          const query = { _processingFlags: '@scan' }
-          await albumDB.deleteMany(query)
-          await photoDB.deleteMany(query)
+          await deleteRemainingUnprocessed({ _processingFlags: '@scan' })
           console.log('marked cleared')
         }
         resolve()
@@ -143,11 +156,14 @@ async function watch (userId, root) {
         const newPhoto = await Photo.newDocument({ userId, parentId: parent.id, path }, { getStats: true })
         if (Photo.allowedFileTypes.includes(newPhoto.extension)) {
           await photoDB.insert(newPhoto)
+          await albumDB.updateSize(parent, newPhoto.size || 0)
           console.log(path, parent.id, 'add')
         }
       }
     })
     .on('unlink', async (path) => {
+      const photo = await photoDB.findOne({ path: pathlib.dirname(path) }, Photo.projections.physical())
+      await albumDB.updateSize(parent, (-1 * photo.size) || 0)
       await photoDB.deleteMany({ path })
       console.log(path, 'unlink')
     })
