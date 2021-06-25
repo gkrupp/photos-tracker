@@ -64,7 +64,8 @@ async function handleCompleted (job, res) {
     // remove
     await deleteRemainingUnprocessed({ parentId, _processingFlags: '@scan' })
     // albumSize
-    const albumSize = (await albumDB.aggregateOne({ parentId }, Album.aggregations.totalSize()))?.size || 0
+    console.error(parentId)
+    const albumSize = (await photoDB.aggregateOne({ parentId }, Photo.aggregations.albumSize()))?.size || 0
     await albumDB.updateOne(parentId, { $set: { size: albumSize } })
   }
 
