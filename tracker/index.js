@@ -24,13 +24,13 @@ async function deleteRemainingUnprocessed (query) {
 
 async function handleCompleted (job, res) {
   const userId = job.data.userId
-  const parentId = job.data.parentId
+  const albumId = job.data.albumId
   console.log(res.albums.length, res.photos.length, job.data.path)
 
   // merge albums
   {
     res.albums = await Promise.all(res.albums.map(Album.newDocument))
-    const inDB = await albumDB.children(userId, parentId, Album.projections.physical)
+    const inDB = await albumDB.children(userId, albumId, Album.projections.physical)
     const { insert, remain, update } = Album.merge(inDB, res.albums)
     // insert
     const insertedIds = await albumDB.insert(insert)
@@ -47,7 +47,7 @@ async function handleCompleted (job, res) {
   // merge photos
   {
     res.photos = await Promise.all(res.photos.map(Photo.newDocument))
-    const inDB = await photoDB.children(userId, parentId, Photo.projections.physical)
+    const inDB = await photoDB.children(userId, albumId, Photo.projections.physical)
     const { insert, remain, update } = Photo.merge(inDB, res.photos)
     // insert
     await photoDB.insert(insert)
@@ -60,13 +60,13 @@ async function handleCompleted (job, res) {
   }
 
   // cleanup
-  await deleteRemainingUnprocessed({ parentId, _processingFlags: '@scan' })
+  await deleteRemainingUnprocessed({ albumId, _processingFlags: '@scan' })
 
   // recursion
   for (const a of res.albums) {
     await Q.add({
       userId: a.userId,
-      parentId: a.id,
+      albumId: a.id,
       path: a.path
     })
   }
@@ -115,7 +115,7 @@ async function scan (userId, root) {
   wereQueueOperations = true
   await Q.add(HOST, {
     userId,
-    parentId: null,
+    albumId: null,
     path: root
   })
 }
@@ -135,7 +135,7 @@ async function watch (userId, root) {
     .on('addDir', async (path) => {
       const parent = await albumDB.findOne({ path: pathlib.dirname(path) }, Album.projections.id)
       if (parent) {
-        const newAlbum = await Album.newDocument({ userId, parentId: parent.id, path }, { getStats: true })
+        const newAlbum = await Album.newDocument({ userId, albumId: parent.id, path }, { getStats: true })
         await albumDB.insert(newAlbum)
         console.log(path, parent.id, 'addDir')
       }
@@ -147,7 +147,7 @@ async function watch (userId, root) {
     .on('add', async (path) => {
       const parent = await albumDB.findOne({ path: pathlib.dirname(path) }, Album.projections.id)
       if (parent) {
-        const newPhoto = await Photo.newDocument({ userId, parentId: parent.id, path }, { getStats: true })
+        const newPhoto = await Photo.newDocument({ userId, albumId: parent.id, path }, { getStats: true })
         if (Photo.allowedFileTypes.includes(newPhoto.extension)) {
           await photoDB.insert(newPhoto)
           console.log(path, parent.id, 'add')
