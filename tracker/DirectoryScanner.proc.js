@@ -1,7 +1,7 @@
 const fs = require('fs')
 const path = require('path')
-const Album = require('../../photos-common/models/album')
-const Photo = require('../../photos-common/models/photo')
+const Album = require('../../photos-common/models/album2')
+const Photo = require('../../photos-common/models/photo2')
 
 async function listRoot (rootPath, userId, rootName = '@') {
   const photos = []
@@ -10,7 +10,9 @@ async function listRoot (rootPath, userId, rootName = '@') {
 }
 
 async function listPath (rootPath, userId, albumId) {
-  const files = await fs.promises.readdir(rootPath, { withFileTypes: true })
+  const files = await fs.promises
+    .readdir(rootPath, { withFileTypes: true })
+    .catch(() => [])
   const photos = []
   const albums = []
   for (const item of files) {
@@ -19,7 +21,7 @@ async function listPath (rootPath, userId, albumId) {
       albums.push(
         await Album.newDocument({ path: itemPath, userId, albumId }, { getStats: true })
       )
-    } else if (item.isFile() && Photo.allowedFileTypes.includes(path.extname(item.name).toLowerCase())) {
+    } else if (item.isFile() && Photo.allowedTypes.includes(path.extname(item.name).toLowerCase())) {
       photos.push(
         await Photo.newDocument({ userId, albumId, path: itemPath }, { getStats: true })
       )

@@ -2,14 +2,13 @@
 const pathlib = require('path')
 const chokidar = require('chokidar')
 
-const Album = require('../../photos-common/models/album')
-const Photo = require('../../photos-common/models/photo')
+const Album = require('../../photos-common/models/album2')
+const Photo = require('../../photos-common/models/photo2')
+
+const { pathPrefixRegExp } = require('../../photos-common/utils')
 
 let Q = null
 let HOST = '*'
-
-let albumDB = null
-let photoDB = null
 
 let wereQueueOperations = false
 
@@ -18,8 +17,8 @@ async function handleActive () {
 }
 
 async function deleteRemainingUnprocessed (query) {
-  await albumDB.deleteMany(query)
-  await photoDB.deleteMany(query)
+  await Album.delete(query)
+  await Photo.delete(query)
 }
 
 async function handleCompleted (job, res) {
@@ -29,33 +28,28 @@ async function handleCompleted (job, res) {
 
   // merge albums
   {
-    res.albums = await Promise.all(res.albums.map(Album.newDocument))
-    const inDB = await albumDB.children(userId, albumId, Album.projections.physical)
+    const inDB = await Album.children(albumId, Album.projections.physical)
     const { insert, remain, update } = Album.merge(inDB, res.albums)
     // insert
-    const insertedIds = await albumDB.insert(insert)
-    insert.forEach((el, i) => (el.id = insertedIds[i]))
+    await Album.insert(insert)
     // remain
-    await albumDB.popProcessingFlags(remain, '@scan')
+    await Album.popProcessingFlags(remain, '@scan')
     // update
-    for (const ud of update) {
-      await albumDB.update(ud.id, ud.update)
-    }
-    await albumDB.popProcessingFlags(update.map(ud => ud.id), '@scan')
+    await Album.save(update)
+    await Album.popProcessingFlags(update, '@scan')
   }
 
   // merge photos
   {
-    res.photos = await Promise.all(res.photos.map(Photo.newDocument))
-    const inDB = await photoDB.children(userId, albumId, Photo.projections.physical)
+    const inDB = await Photo.children(userId, albumId, Photo.projections.physical)
     const { insert, remain, update } = Photo.merge(inDB, res.photos)
     // insert
-    await photoDB.insert(insert)
+    await Photo.insert(insert)
     // remain
-    await photoDB.popProcessingFlags(remain, '@scan')
+    await Photo.popProcessingFlags(remain, '@scan')
     // update
     for (const ud of update) {
-      await photoDB.update(ud.query, ud.update)
+      await Photo.update(ud.query, ud.update)
     }
   }
 
@@ -79,8 +73,12 @@ async function init ({ colls, queue, processorQueue = null, host = '*', processe
   // roots
   HOST = host
   // DBs
-  albumDB = new Album(colls.albums)
-  photoDB = new Photo(colls.photos, { host, processorQueue })
+  Album.init({ coll: colls.albums })
+  Photo.init({
+    coll: colls.photos,
+    host,
+    processorQueue
+  })
 
   Q.on('active', handleActive)
   Q.on('completed', handleCompleted)
@@ -108,10 +106,9 @@ async function stop () {
 async function scan (userId, root) {
   if (!userId) throw new Error(`'userId' is not defined for the path '${root}'`)
   console.log(`Tracker.scan(root:'${root}', userId:'${userId}')`)
-  const pathPrefixRegEx = new RegExp('^' + root)
-  const query = { userId, path: { $regex: pathPrefixRegEx } }
-  await albumDB.pushProcessingFlags(query, '@scan')
-  await photoDB.pushProcessingFlags(query, '@scan')
+  const query = { userId, path: pathPrefixRegExp(root) }
+  await Album.pushProcessingFlags(query, '@scan')
+  await Photo.pushProcessingFlags(query, '@scan')
   wereQueueOperations = true
   await Q.add(HOST, {
     userId,
@@ -133,29 +130,29 @@ async function watch (userId, root) {
   })
   watcher
     .on('addDir', async (path) => {
-      const parent = await albumDB.findOne({ path: pathlib.dirname(path) }, Album.projections.id)
+      const parent = await Album.findOne({ path: pathlib.dirname(path) }, Album.projections.id)
       if (parent) {
         const newAlbum = await Album.newDocument({ userId, albumId: parent.id, path }, { getStats: true })
-        await albumDB.insert(newAlbum)
+        await Album.insert(newAlbum)
         console.log(path, parent.id, 'addDir')
       }
     })
     .on('unlinkDir', async (path) => {
-      await albumDB.deleteOne({ path })
+      await Album.delete({ path })
       console.log(path, 'unlinkDir')
     })
     .on('add', async (path) => {
-      const parent = await albumDB.findOne({ path: pathlib.dirname(path) }, Album.projections.id)
+      const parent = await Album.findOne({ path: pathlib.dirname(path) }, Album.projections.id)
       if (parent) {
         const newPhoto = await Photo.newDocument({ userId, albumId: parent.id, path }, { getStats: true })
         if (Photo.allowedFileTypes.includes(newPhoto.extension)) {
-          await photoDB.insert(newPhoto)
+          await Photo.insert(newPhoto)
           console.log(path, parent.id, 'add')
         }
       }
     })
     .on('unlink', async (path) => {
-      await photoDB.deleteMany({ path })
+      await Photo.delete({ path })
       console.log(path, 'unlink')
     })
 }
