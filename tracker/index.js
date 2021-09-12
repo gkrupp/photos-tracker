@@ -22,14 +22,16 @@ async function deleteRemainingUnprocessed (query) {
 }
 
 async function handleCompleted (job, res) {
-  const userId = job.data.userId
   const albumId = job.data.albumId
-  console.log(res.albums.length, res.photos.length, job.data.path)
+  res.albums = await Promise.all(res.albums.map(album => Album.newDocument(album)))
+  res.photos = await Promise.all(res.photos.map(photo => Photo.newDocument(photo)))
+  const logline = []
 
   // merge albums
   {
-    const inDB = await Album.children(albumId, Album.projections.physical)
+    const inDB = await Album.children(albumId, Album.projections.physical())
     const { insert, remain, update } = Album.merge(inDB, res.albums)
+    logline.push(insert.length, update.length, remain.length, '|')
     // insert
     await Album.insert(insert)
     // remain
@@ -41,8 +43,9 @@ async function handleCompleted (job, res) {
 
   // merge photos
   {
-    const inDB = await Photo.children(userId, albumId, Photo.projections.physical)
+    const inDB = await Photo.children(albumId, Photo.projections.physical())
     const { insert, remain, update } = Photo.merge(inDB, res.photos)
+    logline.push(insert.length, update.length, remain.length, '|')
     // insert
     await Photo.insert(insert)
     // remain
@@ -52,6 +55,8 @@ async function handleCompleted (job, res) {
       await Photo.update(ud.query, ud.update)
     }
   }
+
+  console.log(...logline, job.data.path)
 
   // cleanup
   await deleteRemainingUnprocessed({ albumId, _processingFlags: '@scan' })
@@ -66,7 +71,7 @@ async function handleCompleted (job, res) {
   }
 }
 
-async function init ({ colls, queue, processorQueue = null, host = '*', processes = 1 }) {
+async function init ({ colls, queue, processorQueue = null, convertedCache = null, host = '*', processes = 1 }) {
   // queue
   Q = queue
   Q.process(HOST, processes, pathlib.join(__dirname, './DirectoryScanner.proc.js'))
@@ -77,7 +82,8 @@ async function init ({ colls, queue, processorQueue = null, host = '*', processe
   Photo.init({
     coll: colls.photos,
     host,
-    processorQueue
+    processorQueue,
+    convertedCache
   })
 
   Q.on('active', handleActive)

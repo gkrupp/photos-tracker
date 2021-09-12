@@ -4,6 +4,7 @@ const config = require('./config')
 
 const MongoDBService = require('../photos-common/services/MongoDBService')
 const QueueService = require('../photos-common/services/QueueService')
+const FileCacheService = require('../photos-common/services/FileCacheService')
 const Tracker = require('./tracker')
 
 async function init () {
@@ -13,11 +14,14 @@ async function init () {
   await QueueService.init({ redis: config.redis })
   const trackerQueue = QueueService.create([config.proc.queuePrefix, config.queues.tracker].join(''))
   const processorQueue = QueueService.create([config.proc.queuePrefix, config.queues.processor].join(''))
+  // Cache init
+  const convertedCache = new FileCacheService(config.caches.converted)
   // Tracker init
   await Tracker.init({
     colls: MongoDBService.colls,
     queue: trackerQueue,
-    processorQueue: processorQueue,
+    processorQueue,
+    convertedCache,
     host: config.proc.host,
     processes: config.proc.processes
   })

@@ -18,8 +18,20 @@ module.exports = {
     logLevel: process.env.PROC_LOG_LEVEL
   },
   queues: {
-    tracker: process.env.COMMON_Q_TRACKER,
-    processor: process.env.COMMON_Q_PROCESSOR
+    tracker: process.env.QUEUE_TRACKER,
+    processor: process.env.QUEUE_PROCESSOR
+  },
+  caches: {
+    thumbnails: {
+      root: process.env.CACHE_THUMBNAILS_ROOT,
+      levels: Number(process.env.CACHE_THUMBNAILS_LEVELS),
+      expire: Number(process.env.CACHE_THUMBNAILS_EXPIRE)
+    },
+    converted: {
+      root: process.env.CACHE_CONVERTED_ROOT,
+      levels: Number(process.env.CACHE_CONVERTED_LEVELS),
+      expire: Number(process.env.CACHE_CONVERTED_EXPIRE)
+    }
   },
   redis: {
     host: process.env.RD_HOST,
